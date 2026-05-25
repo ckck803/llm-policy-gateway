@@ -1,0 +1,128 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { SendIcon, ZapIcon } from 'lucide-vue-next'
+import { ChatResponse, RoutingPolicy, useApi } from '../composables/useApi'
+
+const api = useApi()
+const prompt = ref('Django API에서 발생한 stacktrace를 분석하고 해결 방향을 알려줘.')
+const policy = ref('cost-first')
+const policies = ref<RoutingPolicy[]>([])
+const result = ref<ChatResponse | null>(null)
+const error = ref('')
+const loading = ref(false)
+
+async function submit() {
+  loading.value = true
+  error.value = ''
+  result.value = null
+  try {
+    result.value = await api.chat(prompt.value, policy.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Request failed'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(async () => {
+  policies.value = (await api.getPolicies()).filter((item) => item.is_active)
+  if (!policies.value.some((item) => item.name === policy.value) && policies.value[0]) {
+    policy.value = policies.value[0].name
+  }
+})
+</script>
+
+<template>
+  <div class="p-6 lg:p-8">
+    <!-- Page header -->
+    <div class="mb-8">
+      <p class="mb-1 text-xs font-semibold uppercase tracking-widest text-indigo-400">Routing Test</p>
+      <h2 class="text-2xl font-bold text-zinc-100">Playground</h2>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <!-- Input panel -->
+      <div class="flex flex-col gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        <h3 class="text-sm font-semibold text-zinc-200">Request</h3>
+
+        <label class="block">
+          <span class="mb-1.5 block text-xs font-medium text-zinc-400">Policy</span>
+          <select
+            v-model="policy"
+            class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
+          >
+            <option v-for="item in policies" :key="item.id" :value="item.name">
+              {{ item.display_name }} ({{ item.name }})
+            </option>
+          </select>
+        </label>
+
+        <label class="block flex-1">
+          <span class="mb-1.5 block text-xs font-medium text-zinc-400">Prompt</span>
+          <textarea
+            v-model="prompt"
+            rows="10"
+            class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 resize-vertical"
+          />
+        </label>
+
+        <button
+          class="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="loading || !prompt.trim()"
+          @click="submit"
+        >
+          <div v-if="loading" class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
+          <SendIcon v-else class="h-4 w-4" />
+          {{ loading ? 'Routing...' : 'Send to Gateway' }}
+        </button>
+      </div>
+
+      <!-- Result panel -->
+      <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        <h3 class="mb-4 text-sm font-semibold text-zinc-200">Routing Result</h3>
+
+        <div v-if="error" class="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+          {{ error }}
+        </div>
+
+        <div v-else-if="result" class="space-y-4">
+          <!-- Routing meta -->
+          <div class="grid grid-cols-3 gap-3">
+            <div class="rounded-lg bg-zinc-800/60 p-3">
+              <p class="mb-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Model</p>
+              <p class="text-sm font-semibold text-zinc-200 truncate">{{ result.selected_provider }}/{{ result.selected_model }}</p>
+            </div>
+            <div class="rounded-lg bg-zinc-800/60 p-3">
+              <p class="mb-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Latency</p>
+              <p class="text-sm font-semibold text-zinc-200">{{ result.latency_ms }}ms</p>
+            </div>
+            <div class="rounded-lg bg-zinc-800/60 p-3">
+              <p class="mb-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">Tokens</p>
+              <p class="text-sm font-semibold text-zinc-200">{{ result.estimated_tokens }}</p>
+            </div>
+          </div>
+
+          <!-- Routing reason -->
+          <div>
+            <div class="mb-1.5 flex items-center gap-1.5">
+              <ZapIcon class="h-3.5 w-3.5 text-amber-400" />
+              <p class="text-xs font-semibold uppercase tracking-wide text-zinc-400">Routing Reason</p>
+            </div>
+            <p class="text-sm text-zinc-300 leading-relaxed">{{ result.routing_reason }}</p>
+          </div>
+
+          <!-- Response -->
+          <div>
+            <p class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400">Response</p>
+            <pre class="overflow-auto rounded-lg bg-zinc-950 p-4 text-xs text-zinc-300 leading-relaxed max-h-64 whitespace-pre-wrap border border-zinc-800">{{ result.response_text || result.error_message }}</pre>
+          </div>
+        </div>
+
+        <div v-else class="flex flex-col items-center justify-center py-16 text-center">
+          <SendIcon class="mb-3 h-8 w-8 text-zinc-700" />
+          <p class="text-sm text-zinc-500">Submit a prompt to see model selection,<br />routing reason, and latency.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

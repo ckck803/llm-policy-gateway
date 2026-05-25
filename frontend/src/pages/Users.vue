@@ -1,0 +1,162 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { EditIcon, PlusIcon, SearchIcon, UsersIcon } from 'lucide-vue-next'
+import AdminDataTable from '../components/common/AdminDataTable.vue'
+import UserModal from '../components/modals/UserModal.vue'
+import { AppUser, AppUserPayload, ScreenDefinition, useApi } from '../composables/useApi'
+
+const api = useApi()
+const users = ref<AppUser[]>([])
+const screens = ref<ScreenDefinition[]>([])
+const selectedUser = ref<AppUser | null>(null)
+const showModal = ref(false)
+const loading = ref(false)
+const searchQuery = ref('')
+const error = ref('')
+
+const filteredUsers = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  return users.value.filter((user) => !query || user.username.toLowerCase().includes(query))
+})
+
+async function loadPageData() {
+  loading.value = true
+  try {
+    const [loadedUsers, loadedScreens] = await Promise.all([api.getUsers(), api.getScreens()])
+    users.value = loadedUsers
+    screens.value = loadedScreens
+  } finally {
+    loading.value = false
+  }
+}
+
+async function openCreateModal() {
+  selectedUser.value = null
+  showModal.value = true
+}
+
+async function openEditModal(user: AppUser) {
+  selectedUser.value = user
+  showModal.value = true
+}
+
+function closeModal() {
+  showModal.value = false
+  selectedUser.value = null
+}
+
+async function saveUser(payload: AppUserPayload) {
+  error.value = ''
+  try {
+    const cleanPayload = { ...payload }
+    if (selectedUser.value && !cleanPayload.password) {
+      delete cleanPayload.password
+    }
+    if (selectedUser.value) {
+      await api.updateUser(selectedUser.value.id, cleanPayload)
+    } else {
+      await api.createUser(cleanPayload)
+    }
+    closeModal()
+    await loadPageData()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to save user'
+  }
+}
+
+async function deleteUser(user: AppUser) {
+  await api.deleteUser(user.id)
+  closeModal()
+  await loadPageData()
+}
+
+onMounted(loadPageData)
+</script>
+
+<template>
+  <div class="p-6 lg:p-8">
+    <div class="mb-6 flex items-center justify-between gap-4">
+      <div>
+        <p class="mb-1 text-xs font-semibold uppercase tracking-widest text-indigo-400">Access Control</p>
+        <h2 class="text-2xl font-bold text-zinc-100">Users</h2>
+      </div>
+      <button
+        class="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500"
+        type="button"
+        @click="openCreateModal"
+      >
+        <PlusIcon class="h-4 w-4" />
+        Add User
+      </button>
+    </div>
+
+    <div class="mb-5 flex flex-wrap items-center gap-3">
+      <div class="relative min-w-72 flex-1">
+        <SearchIcon class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        <input
+          v-model="searchQuery"
+          class="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2.5 pl-9 pr-4 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
+          placeholder="Search username..."
+          type="text"
+        />
+      </div>
+    </div>
+
+    <div v-if="error" class="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+      {{ error }}
+    </div>
+
+    <AdminDataTable :loading="loading" :is-empty="filteredUsers.length === 0">
+      <template #head>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Username</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Staff</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Status</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Screens</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Action</th>
+      </template>
+
+      <template #empty>
+        <UsersIcon class="mx-auto mb-4 h-12 w-12 text-zinc-700" />
+        <h3 class="mb-1 text-sm font-semibold text-zinc-300">No users found</h3>
+        <button
+          class="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          @click="openCreateModal"
+        >
+          Add User
+        </button>
+      </template>
+
+      <tr
+        v-for="user in filteredUsers"
+        :key="user.id"
+        class="cursor-pointer transition-colors hover:bg-zinc-800/30"
+        @click="openEditModal(user)"
+      >
+        <td class="whitespace-nowrap px-5 py-3.5 font-medium text-zinc-200">{{ user.username }}</td>
+        <td class="whitespace-nowrap px-5 py-3.5">
+          <span :class="['rounded-md px-2 py-0.5 text-xs font-medium border', user.is_staff ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-zinc-800 text-zinc-500 border-zinc-700']">
+            {{ user.is_staff ? 'yes' : 'no' }}
+          </span>
+        </td>
+        <td class="whitespace-nowrap px-5 py-3.5">
+          <span :class="['rounded-md px-2 py-0.5 text-xs font-medium border', user.is_active ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-zinc-800 text-zinc-500 border-zinc-700']">
+            {{ user.is_active ? 'active' : 'inactive' }}
+          </span>
+        </td>
+        <td class="px-5 py-3.5 text-sm text-zinc-500">{{ user.allowed_screens.join(', ') }}</td>
+        <td class="whitespace-nowrap px-5 py-3.5">
+          <button
+            class="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+            title="Edit"
+            type="button"
+            @click.stop="openEditModal(user)"
+          >
+            <EditIcon class="h-4 w-4" />
+          </button>
+        </td>
+      </tr>
+    </AdminDataTable>
+
+    <UserModal v-if="showModal" :user="selectedUser" :screens="screens" @close="closeModal" @delete="deleteUser" @save="saveUser" />
+  </div>
+</template>
