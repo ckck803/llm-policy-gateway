@@ -2,11 +2,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { EditIcon, PlusIcon, SearchIcon, ServerIcon } from 'lucide-vue-next'
 import AdminDataTable from '../components/common/AdminDataTable.vue'
+import PaginationControls from '../components/common/PaginationControls.vue'
 import ModelModal from '../components/modals/ModelModal.vue'
-import { LLMModel, LLMModelPayload, useApi } from '../composables/useApi'
+import AppSelect from '../components/common/AppSelect.vue'
+import { LLMModel, LLMModelPayload, ProviderCredential, useApi } from '../composables/useApi'
+import { usePagination } from '../composables/usePagination'
 
 const api = useApi()
 const models = ref<LLMModel[]>([])
+const credentials = ref<ProviderCredential[]>([])
 const selectedModel = ref<LLMModel | null>(null)
 const showModal = ref(false)
 const loading = ref(false)
@@ -22,6 +26,9 @@ const filteredModels = computed(() => {
       model.name.toLowerCase().includes(query) ||
       model.display_name.toLowerCase().includes(query) ||
       model.provider.toLowerCase().includes(query) ||
+      model.model_tier.toLowerCase().includes(query) ||
+      model.health_status.toLowerCase().includes(query) ||
+      model.health_reason.toLowerCase().includes(query) ||
       model.role.toLowerCase().includes(query)
     const matchesStatus =
       statusFilter.value === 'all' ||
@@ -30,22 +37,43 @@ const filteredModels = computed(() => {
     return matchesQuery && matchesStatus
   })
 })
+const {
+  page,
+  pageSize,
+  pageSizeOptions,
+  totalItems,
+  totalPages,
+  startItem,
+  endItem,
+  paginatedItems: paginatedModels
+} = usePagination(filteredModels)
 
 async function loadModels() {
   loading.value = true
   try {
-    models.value = await api.getModels()
+    const [loadedModels, loadedCredentials] = await Promise.all([
+      api.getModels(),
+      api.getProviderCredentials()
+    ])
+    models.value = loadedModels
+    credentials.value = loadedCredentials
   } finally {
     loading.value = false
   }
 }
 
-function openCreateModal() {
+async function refreshCredentials() {
+  credentials.value = await api.getProviderCredentials()
+}
+
+async function openCreateModal() {
+  await refreshCredentials()
   selectedModel.value = null
   showModal.value = true
 }
 
-function openEditModal(model: LLMModel) {
+async function openEditModal(model: LLMModel) {
+  await refreshCredentials()
   selectedModel.value = model
   showModal.value = true
 }
@@ -108,14 +136,10 @@ onMounted(loadModels)
           type="text"
         />
       </div>
-      <select
+      <AppSelect
         v-model="statusFilter"
-        class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
-      >
-        <option value="all">All status</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
+        :options="[{ value: 'all', label: 'All status' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]"
+      />
     </div>
 
     <!-- Error -->
@@ -126,11 +150,16 @@ onMounted(loadModels)
     <AdminDataTable :loading="loading" :is-empty="filteredModels.length === 0">
       <template #head>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Model</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Tier</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Role</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Quality</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Speed</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Cost</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Token $/1M</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Latency</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Health</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Privacy</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Credential</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Status</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Action</th>
       </template>
@@ -148,7 +177,7 @@ onMounted(loadModels)
       </template>
 
       <tr
-        v-for="model in filteredModels"
+        v-for="model in paginatedModels"
         :key="model.id"
         class="cursor-pointer transition-colors hover:bg-zinc-800/30"
         @click="openEditModal(model)"
@@ -157,14 +186,41 @@ onMounted(loadModels)
           <div class="font-medium text-zinc-200">{{ model.display_name }}</div>
           <div class="text-xs text-zinc-500">{{ model.provider }}/{{ model.name }}</div>
         </td>
+        <td class="whitespace-nowrap px-5 py-3.5">
+          <span class="rounded-md border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300">
+            {{ model.model_tier }}
+          </span>
+        </td>
         <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">{{ model.role }}</td>
         <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">{{ model.quality_level }}</td>
         <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">{{ model.speed_level }}</td>
         <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">{{ model.cost_level }}</td>
+        <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">
+          {{ model.input_token_price_per_1m }} / {{ model.output_token_price_per_1m }}
+        </td>
+        <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">
+          {{ model.average_latency_ms || '-' }}ms
+        </td>
+        <td class="whitespace-nowrap px-5 py-3.5">
+          <span
+            :class="[
+              'rounded-md border px-2 py-0.5 text-xs font-medium',
+              model.health_status === 'unhealthy'
+                ? 'border-red-500/20 bg-red-500/10 text-red-300'
+                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+            ]"
+            :title="model.health_reason"
+          >
+            {{ model.health_status }}
+          </span>
+        </td>
         <td class="whitespace-nowrap px-5 py-3.5">
           <span class="rounded-md bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-400 border border-indigo-500/20">
             {{ model.privacy_level }}
           </span>
+        </td>
+        <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-400">
+          {{ model.provider_credential_display_name || '-' }}
         </td>
         <td class="whitespace-nowrap px-5 py-3.5">
           <span
@@ -189,11 +245,24 @@ onMounted(loadModels)
           </button>
         </td>
       </tr>
+
+      <template #footer>
+        <PaginationControls
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :page-size-options="pageSizeOptions"
+          :total-items="totalItems"
+          :total-pages="totalPages"
+          :start-item="startItem"
+          :end-item="endItem"
+        />
+      </template>
     </AdminDataTable>
 
     <ModelModal
       v-if="showModal"
       :model="selectedModel"
+      :credentials="credentials"
       @close="closeModal"
       @disable="disableModel"
       @save="saveModel"

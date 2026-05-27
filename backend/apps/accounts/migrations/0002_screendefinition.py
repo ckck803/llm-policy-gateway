@@ -4,6 +4,7 @@ from django.db import migrations, models
 DEFAULT_SCREENS = [
     {"screen_id": "dashboard", "label": "Dashboard", "description": "운영 지표와 최근 요청 현황", "sort_order": 10},
     {"screen_id": "playground", "label": "Playground", "description": "프롬프트 실행 및 라우팅 결과 확인", "sort_order": 20},
+    {"screen_id": "simulator", "label": "Routing Simulator", "description": "프롬프트별 모델 선택 점수 시뮬레이션", "sort_order": 25},
     {"screen_id": "models", "label": "Models", "description": "LLM 모델 카탈로그 관리", "sort_order": 30},
     {"screen_id": "policies", "label": "Policies", "description": "라우팅 정책 관리", "sort_order": 40},
     {"screen_id": "credentials", "label": "Credentials", "description": "외부 Provider 접속 정보 관리", "sort_order": 50},

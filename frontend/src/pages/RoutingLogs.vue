@@ -1,26 +1,134 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { SearchIcon } from 'lucide-vue-next'
 import { RoutingLog, useApi } from '../composables/useApi'
+import PaginationControls from '../components/common/PaginationControls.vue'
+import RoutingLogDetailModal from '../components/modals/RoutingLogDetailModal.vue'
 
+type LogDensity = 'comfortable' | 'compact' | 'dense'
+
+const DENSITY_KEY = 'routing-logs-density'
 const api = useApi()
 const logs = ref<RoutingLog[]>([])
+const selectedLog = ref<RoutingLog | null>(null)
 const loading = ref(true)
+const searchQuery = ref('')
+const page = ref(1)
+const pageSize = ref(10)
+const pageSizeOptions = [10, 25, 50, 100]
+const totalItems = ref(0)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)))
+const startItem = computed(() => (totalItems.value === 0 ? 0 : (page.value - 1) * pageSize.value + 1))
+const endItem = computed(() => Math.min(page.value * pageSize.value, totalItems.value))
+const density = ref<LogDensity>((localStorage.getItem(DENSITY_KEY) as LogDensity) || 'comfortable')
 
-onMounted(async () => {
+const densityClasses = computed(() => {
+  if (density.value === 'dense') {
+    return {
+      cell: 'px-3 py-2 text-xs',
+      badge: 'rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300'
+    }
+  }
+
+  if (density.value === 'compact') {
+    return {
+      cell: 'px-4 py-2.5 text-xs',
+      badge: 'rounded-md bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300'
+    }
+  }
+
+  return {
+    cell: 'px-5 py-3.5 text-sm',
+    badge: 'rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-300'
+  }
+})
+
+watch(density, (value) => {
+  localStorage.setItem(DENSITY_KEY, value)
+})
+
+let searchTimer: number | undefined
+
+async function loadLogs() {
+  loading.value = true
   try {
-    logs.value = await api.getLogs()
+    const response = await api.getLogs({
+      page: page.value,
+      pageSize: pageSize.value,
+      search: searchQuery.value.trim(),
+      ordering: '-created_at'
+    })
+    logs.value = response.results
+    totalItems.value = response.count
   } finally {
     loading.value = false
   }
+}
+
+function openLogDetail(log: RoutingLog) {
+  selectedLog.value = log
+}
+
+function closeLogDetail() {
+  selectedLog.value = null
+}
+
+watch(page, loadLogs)
+
+watch(pageSize, () => {
+  if (page.value === 1) {
+    void loadLogs()
+  } else {
+    page.value = 1
+  }
 })
+
+watch(searchQuery, () => {
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    if (page.value === 1) {
+      void loadLogs()
+    } else {
+      page.value = 1
+    }
+  }, 300)
+})
+
+onMounted(loadLogs)
 </script>
 
 <template>
   <div class="p-6 lg:p-8">
     <!-- Page header -->
-    <div class="mb-8">
-      <p class="mb-1 text-xs font-semibold uppercase tracking-widest text-indigo-400">Audit Trail</p>
-      <h2 class="text-2xl font-bold text-zinc-100">Routing Logs</h2>
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="mb-1 text-xs font-semibold uppercase tracking-widest text-indigo-400">Audit Trail</p>
+        <h2 class="text-2xl font-bold text-zinc-100">Routing Logs</h2>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative w-72">
+          <SearchIcon class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          <input
+            v-model="searchQuery"
+            class="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
+            placeholder="Search logs..."
+            type="text"
+          />
+        </div>
+
+        <label class="flex items-center gap-2 text-sm text-zinc-500">
+          Density
+          <select
+            v-model="density"
+            class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
+          >
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
+            <option value="dense">Dense</option>
+          </select>
+        </label>
+      </div>
     </div>
 
     <div class="rounded-xl border border-zinc-800 bg-zinc-900">
@@ -41,21 +149,40 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody class="divide-y divide-zinc-800/60">
-            <tr v-for="log in logs" :key="log.id" class="hover:bg-zinc-800/30 transition-colors">
-              <td class="max-w-xs truncate px-5 py-3.5 text-sm text-zinc-300">{{ log.prompt_summary }}</td>
-              <td class="whitespace-nowrap px-5 py-3.5">
-                <span class="rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-300">{{ log.policy }}</span>
+            <tr
+              v-for="log in logs"
+              :key="log.id"
+              class="cursor-pointer hover:bg-zinc-800/30 transition-colors"
+              @click="openLogDetail(log)"
+            >
+              <td :class="['max-w-xs truncate text-zinc-300', densityClasses.cell]">{{ log.prompt_summary }}</td>
+              <td :class="['whitespace-nowrap', densityClasses.cell]">
+                <span :class="densityClasses.badge">{{ log.policy }}</span>
               </td>
-              <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-400">{{ log.selected_provider }}/{{ log.selected_model }}</td>
-              <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-400">{{ log.latency_ms }}ms</td>
-              <td class="px-5 py-3.5 text-sm text-zinc-500 max-w-xs truncate">{{ log.routing_reason }}</td>
+              <td :class="['whitespace-nowrap text-zinc-400', densityClasses.cell]">{{ log.selected_provider }}/{{ log.selected_model }}</td>
+              <td :class="['whitespace-nowrap text-zinc-400', densityClasses.cell]">{{ log.latency_ms }}ms</td>
+              <td :class="['max-w-xs truncate text-zinc-500', densityClasses.cell]">{{ log.routing_reason }}</td>
             </tr>
             <tr v-if="!logs.length">
-              <td colspan="5" class="px-5 py-16 text-center text-sm text-zinc-600">No routing logs yet</td>
+              <td colspan="5" class="px-5 py-16 text-center text-sm text-zinc-600">
+                {{ searchQuery.trim() ? 'No logs match your search' : 'No routing logs yet' }}
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
+      <PaginationControls
+        v-if="!loading && totalItems"
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        :total-items="totalItems"
+        :total-pages="totalPages"
+        :start-item="startItem"
+        :end-item="endItem"
+      />
     </div>
+
+    <RoutingLogDetailModal v-if="selectedLog" :log="selectedLog" @close="closeLogDetail" />
   </div>
 </template>

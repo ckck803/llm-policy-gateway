@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { BotIcon, LockIcon, UserIcon } from 'lucide-vue-next'
-import { useApi } from '../composables/useApi'
+import { LoginResponse, useApi } from '../composables/useApi'
 
 const emit = defineEmits<{
-  loggedIn: [token: string]
+  loggedIn: [response: LoginResponse]
 }>()
 
 const api = useApi()
@@ -18,7 +18,7 @@ async function submit() {
   error.value = ''
   try {
     const response = await api.login(username.value, password.value)
-    emit('loggedIn', response.token)
+    emit('loggedIn', response)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Login failed'
   } finally {

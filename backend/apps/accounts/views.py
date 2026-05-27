@@ -3,10 +3,21 @@ from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth.models import User
+from django.utils import timezone
+from rest_framework import filters
 
-from apps.accounts.models import ScreenDefinition
-from apps.accounts.serializers import LoginSerializer, ScreenDefinitionSerializer, UserSerializer
+from apps.accounts.audit import record_audit_log
+from apps.accounts.models import AuditLog, ScreenDefinition, SecurityPolicy, UserSession
+from apps.accounts.serializers import (
+    AuditLogSerializer,
+    LoginSerializer,
+    ScreenDefinitionSerializer,
+    SecurityPolicySerializer,
+    UserSerializer,
+    UserSessionSerializer,
+)
 from apps.accounts.screens import get_available_screens
+from apps.accounts.session_control import create_user_session
 
 
 class IsStaffUser(permissions.BasePermission):
@@ -24,11 +35,12 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
-        # 같은 사용자는 하나의 토큰을 재사용합니다. 로그아웃 시 해당 토큰을 삭제합니다.
-        token, _ = Token.objects.get_or_create(user=user)
+        # 새 로그인은 관리형 세션 토큰을 발급합니다. 기존 DRF Token은 테스트/레거시
+        # 호환을 위해 인증에서만 fallback으로 지원합니다.
+        session = create_user_session(user=user, request=request)
         return Response(
             {
-                "token": token.key,
+                "token": session.token_key,
                 "user": UserSerializer(user).data,
             }
         )
@@ -42,8 +54,11 @@ class MeView(APIView):
 
 class LogoutView(APIView):
     def post(self, request):
-        # DRF token은 stateless 세션처럼 쓰이므로, 로그아웃은 서버 토큰 삭제로 처리합니다.
-        Token.objects.filter(user=request.user).delete()
+        if isinstance(request.auth, UserSession):
+            request.auth.logout()
+        else:
+            # 레거시 DRF token으로 들어온 요청은 기존 방식대로 토큰을 삭제합니다.
+            Token.objects.filter(user=request.user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -59,6 +74,19 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all().order_by("username")
     serializer_class = UserSerializer
     permission_classes = [IsStaffUser]
+
+    def perform_update(self, serializer):
+        before_is_active = serializer.instance.is_active
+        user = serializer.save()
+        record_audit_log(
+            request=self.request,
+            action="user.update",
+            resource_type="user",
+            resource_id=user.id,
+            resource_name=user.username,
+        )
+        if before_is_active and not user.is_active:
+            UserSession.objects.filter(user=user, status="active").update(status="revoked", revoked_at=timezone.now())
 
 
 class ScreenListView(generics.ListCreateAPIView):
@@ -79,3 +107,56 @@ class ScreenDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = ScreenDefinition.objects.all()
     serializer_class = ScreenDefinitionSerializer
     permission_classes = [IsStaffUser]
+
+
+class SecurityPolicyView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        return Response(SecurityPolicySerializer(SecurityPolicy.get_active()).data)
+
+    def patch(self, request):
+        policy = SecurityPolicy.get_active()
+        serializer = SecurityPolicySerializer(policy, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        record_audit_log(
+            request=request,
+            action="security_policy.update",
+            resource_type="security_policy",
+            resource_id=policy.id,
+            resource_name="Security Policy",
+        )
+        return Response(serializer.data)
+
+
+class UserSessionListView(generics.ListAPIView):
+    queryset = UserSession.objects.select_related("user").all()
+    serializer_class = UserSessionSerializer
+    permission_classes = [IsStaffUser]
+
+
+class UserSessionRevokeView(APIView):
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, pk):
+        session = generics.get_object_or_404(UserSession, pk=pk)
+        session.revoke()
+        record_audit_log(
+            request=request,
+            action="session.revoke",
+            resource_type="user_session",
+            resource_id=session.id,
+            resource_name=session.user.username,
+        )
+        return Response(UserSessionSerializer(session).data)
+
+
+class AuditLogListView(generics.ListAPIView):
+    queryset = AuditLog.objects.select_related("actor").all()
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsStaffUser]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["actor__username", "action", "resource_type", "resource_name", "ip_address"]
+    ordering_fields = ["created_at", "action", "resource_type", "resource_name"]
+    ordering = ["-created_at"]

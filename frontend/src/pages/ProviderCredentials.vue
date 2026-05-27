@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { EditIcon, KeyRoundIcon, PlusIcon, SearchIcon } from 'lucide-vue-next'
+import { DownloadIcon, EditIcon, KeyRoundIcon, PlusIcon, SearchIcon } from 'lucide-vue-next'
 import AdminDataTable from '../components/common/AdminDataTable.vue'
+import PaginationControls from '../components/common/PaginationControls.vue'
 import ProviderCredentialModal from '../components/modals/ProviderCredentialModal.vue'
-import { ProviderCredential, ProviderCredentialPayload, useApi } from '../composables/useApi'
+import ProviderModelSyncModal from '../components/modals/ProviderModelSyncModal.vue'
+import { ProviderCredential, ProviderCredentialPayload, ProviderModelCandidate, useApi } from '../composables/useApi'
+import { usePagination } from '../composables/usePagination'
 
 const api = useApi()
 const credentials = ref<ProviderCredential[]>([])
 const selectedCredential = ref<ProviderCredential | null>(null)
+const syncCredential = ref<ProviderCredential | null>(null)
+const providerModels = ref<ProviderModelCandidate[]>([])
 const showModal = ref(false)
+const showSyncModal = ref(false)
 const loading = ref(false)
+const syncLoading = ref(false)
+const importing = ref(false)
 const searchQuery = ref('')
 const error = ref('')
 
@@ -24,11 +32,19 @@ const filteredCredentials = computed(() => {
     )
   })
 })
+const {
+  page,
+  pageSize,
+  pageSizeOptions,
+  totalItems,
+  totalPages,
+  startItem,
+  endItem,
+  paginatedItems: paginatedCredentials
+} = usePagination(filteredCredentials)
 
-function maskToken(token: string) {
-  if (!token) return '-'
-  if (token.length <= 8) return '••••••••'
-  return `${token.slice(0, 4)}••••••••${token.slice(-4)}`
+function formatDate(value: string | null) {
+  return value ? new Date(value).toLocaleString() : '-'
 }
 
 async function loadCredentials() {
@@ -76,6 +92,50 @@ async function deleteCredential(credential: ProviderCredential) {
   await loadCredentials()
 }
 
+async function openSyncModal(credential: ProviderCredential) {
+  error.value = ''
+  syncCredential.value = credential
+  showSyncModal.value = true
+  await refreshProviderModels()
+}
+
+function closeSyncModal() {
+  showSyncModal.value = false
+  syncCredential.value = null
+  providerModels.value = []
+}
+
+async function refreshProviderModels() {
+  if (!syncCredential.value) {
+    return
+  }
+  syncLoading.value = true
+  try {
+    const response = await api.previewProviderModels(syncCredential.value.id)
+    providerModels.value = response.models
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to fetch provider models'
+  } finally {
+    syncLoading.value = false
+  }
+}
+
+async function importProviderModels(modelNames: string[]) {
+  if (!syncCredential.value) {
+    return
+  }
+  importing.value = true
+  error.value = ''
+  try {
+    await api.importProviderModels(syncCredential.value.id, modelNames)
+    await refreshProviderModels()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to import provider models'
+  } finally {
+    importing.value = false
+  }
+}
+
 onMounted(loadCredentials)
 </script>
 
@@ -117,8 +177,9 @@ onMounted(loadCredentials)
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Provider</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Base URL</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Access Token</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Usage</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Status</th>
-        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Action</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Actions</th>
       </template>
 
       <template #empty>
@@ -134,7 +195,7 @@ onMounted(loadCredentials)
       </template>
 
       <tr
-        v-for="credential in filteredCredentials"
+        v-for="credential in paginatedCredentials"
         :key="credential.id"
         class="cursor-pointer transition-colors hover:bg-zinc-800/30"
         @click="openEditModal(credential)"
@@ -144,7 +205,11 @@ onMounted(loadCredentials)
           <div class="text-xs text-zinc-500">{{ credential.provider }}</div>
         </td>
         <td class="px-5 py-3.5 text-sm text-zinc-400">{{ credential.base_url }}</td>
-        <td class="whitespace-nowrap px-5 py-3.5 font-mono text-sm text-zinc-500">{{ maskToken(credential.access_token) }}</td>
+        <td class="whitespace-nowrap px-5 py-3.5 font-mono text-sm text-zinc-500">{{ credential.access_token_masked || '-' }}</td>
+        <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-400">
+          <div>used {{ formatDate(credential.last_used_at) }}</div>
+          <div class="text-xs text-zinc-500">rotated {{ formatDate(credential.token_rotated_at) }}</div>
+        </td>
         <td class="whitespace-nowrap px-5 py-3.5">
           <span
             :class="[
@@ -159,6 +224,15 @@ onMounted(loadCredentials)
         </td>
         <td class="whitespace-nowrap px-5 py-3.5">
           <button
+            class="mr-1 rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Sync provider models"
+            type="button"
+            :disabled="!credential.is_active"
+            @click.stop="openSyncModal(credential)"
+          >
+            <DownloadIcon class="h-4 w-4" />
+          </button>
+          <button
             class="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
             title="Edit"
             type="button"
@@ -168,6 +242,18 @@ onMounted(loadCredentials)
           </button>
         </td>
       </tr>
+
+      <template #footer>
+        <PaginationControls
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :page-size-options="pageSizeOptions"
+          :total-items="totalItems"
+          :total-pages="totalPages"
+          :start-item="startItem"
+          :end-item="endItem"
+        />
+      </template>
     </AdminDataTable>
 
     <ProviderCredentialModal
@@ -176,6 +262,17 @@ onMounted(loadCredentials)
       @close="closeModal"
       @delete="deleteCredential"
       @save="saveCredential"
+    />
+
+    <ProviderModelSyncModal
+      v-if="showSyncModal && syncCredential"
+      :credential="syncCredential"
+      :models="providerModels"
+      :loading="syncLoading"
+      :importing="importing"
+      @close="closeSyncModal"
+      @refresh="refreshProviderModels"
+      @import="importProviderModels"
     />
   </div>
 </template>

@@ -1,12 +1,24 @@
 DEFAULT_SCREENS = [
     {"id": "dashboard", "label": "Dashboard"},
     {"id": "playground", "label": "Playground"},
+    {"id": "simulator", "label": "Routing Simulator"},
     {"id": "models", "label": "Models"},
     {"id": "policies", "label": "Policies"},
+    {"id": "routing-rules", "label": "Routing Rules"},
+    {"id": "threshold-rules", "label": "Threshold Rules"},
+    {"id": "validation-rules", "label": "Validation Rules"},
+    {"id": "recovery-strategies", "label": "Recovery Strategies"},
     {"id": "credentials", "label": "Credentials"},
+    {"id": "quotas", "label": "Usage Quotas"},
+    {"id": "health-rules", "label": "Health Rules"},
+    {"id": "health-events", "label": "Health Events"},
+    {"id": "health-overrides", "label": "Health Overrides"},
     {"id": "logs", "label": "Routing Logs"},
     {"id": "users", "label": "Users"},
     {"id": "screens", "label": "Screens"},
+    {"id": "security-settings", "label": "Security Settings"},
+    {"id": "sessions", "label": "User Sessions"},
+    {"id": "audit-logs", "label": "Audit Logs"},
 ]
 
 ALL_SCREENS = [screen["id"] for screen in DEFAULT_SCREENS]

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { SendIcon, ZapIcon } from 'lucide-vue-next'
 import { ChatResponse, RoutingPolicy, useApi } from '../composables/useApi'
+import AppSelect, { SelectOption } from '../components/common/AppSelect.vue'
 
 const api = useApi()
 const prompt = ref('Django API에서 발생한 stacktrace를 분석하고 해결 방향을 알려줘.')
@@ -23,6 +24,10 @@ async function submit() {
     loading.value = false
   }
 }
+
+const policyOptions = computed<SelectOption[]>(() =>
+  policies.value.map((p) => ({ value: p.name, label: `${p.display_name} (${p.name})` }))
+)
 
 onMounted(async () => {
   policies.value = (await api.getPolicies()).filter((item) => item.is_active)
@@ -47,14 +52,7 @@ onMounted(async () => {
 
         <label class="block">
           <span class="mb-1.5 block text-xs font-medium text-zinc-400">Policy</span>
-          <select
-            v-model="policy"
-            class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
-          >
-            <option v-for="item in policies" :key="item.id" :value="item.name">
-              {{ item.display_name }} ({{ item.name }})
-            </option>
-          </select>
+          <AppSelect v-model="policy" :options="policyOptions" />
         </label>
 
         <label class="block flex-1">

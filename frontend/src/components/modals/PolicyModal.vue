@@ -24,7 +24,12 @@ const form = reactive<RoutingPolicyPayload>({
     speed_weight: 1,
     cost_weight: 1,
     context_weight: 0,
-    local_only: false
+    local_only: false,
+    prefer_coding_models: true,
+    prefer_reasoning_models: true,
+    min_context_window: 0,
+    max_estimated_cost_usd: '',
+    fallback_to_local_on_budget: false
   },
   is_active: true
 })
@@ -41,7 +46,12 @@ watch(
         speed_weight: policy?.priority_config.speed_weight ?? 1,
         cost_weight: policy?.priority_config.cost_weight ?? 1,
         context_weight: policy?.priority_config.context_weight ?? 0,
-        local_only: policy?.priority_config.local_only ?? false
+        local_only: policy?.priority_config.local_only ?? false,
+        prefer_coding_models: policy?.priority_config.prefer_coding_models ?? true,
+        prefer_reasoning_models: policy?.priority_config.prefer_reasoning_models ?? true,
+        min_context_window: policy?.priority_config.min_context_window ?? 0,
+        max_estimated_cost_usd: policy?.priority_config.max_estimated_cost_usd ?? '',
+        fallback_to_local_on_budget: policy?.priority_config.fallback_to_local_on_budget ?? false
       },
       is_active: policy?.is_active ?? true
     })
@@ -100,6 +110,26 @@ watch(
           <label class="flex items-center gap-3 text-sm font-medium text-zinc-400">
             <input v-model="form.priority_config.local_only" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500" />
             Local only
+          </label>
+          <label class="flex items-center gap-3 text-sm font-medium text-zinc-400">
+            <input v-model="form.priority_config.prefer_coding_models" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500" />
+            Prefer coding models for code prompts
+          </label>
+          <label class="flex items-center gap-3 text-sm font-medium text-zinc-400">
+            <input v-model="form.priority_config.prefer_reasoning_models" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500" />
+            Prefer reasoning models for reasoning prompts
+          </label>
+          <label class="block">
+            <span class="mb-1.5 block text-xs font-medium text-zinc-400">Minimum context window</span>
+            <input v-model.number="form.priority_config.min_context_window" min="0" type="number" class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50" />
+          </label>
+          <label class="block">
+            <span class="mb-1.5 block text-xs font-medium text-zinc-400">Max estimated cost USD</span>
+            <input v-model="form.priority_config.max_estimated_cost_usd" min="0" step="0.000001" type="number" placeholder="0.0005" class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50" />
+          </label>
+          <label class="flex items-center gap-3 text-sm font-medium text-zinc-400">
+            <input v-model="form.priority_config.fallback_to_local_on_budget" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500" />
+            Fallback to local when budget is exceeded
           </label>
           <label class="flex items-center gap-3 text-sm font-medium text-zinc-400">
             <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500" />

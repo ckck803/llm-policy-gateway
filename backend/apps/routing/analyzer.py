@@ -23,6 +23,15 @@ CODE_KEYWORDS = {
     "코드",
 }
 
+STRUCTURED_OUTPUT_KEYWORDS = {
+    "json",
+    "sql",
+    "schema",
+    "structured",
+    "구조화",
+    "쿼리",
+}
+
 REASONING_KEYWORDS = {
     "분석",
     "비교",
@@ -43,6 +52,7 @@ class PromptAnalysis:
     is_long_context: bool
     requires_reasoning: bool
     estimated_tokens: int
+    is_structured_output: bool = False
 
 
 class PromptAnalyzer:
@@ -54,6 +64,7 @@ class PromptAnalyzer:
         return PromptAnalysis(
             has_sensitive_data=any(pattern.search(prompt) for pattern in SENSITIVE_PATTERNS),
             is_code=any(keyword in normalized for keyword in CODE_KEYWORDS),
+            is_structured_output=any(keyword in normalized for keyword in STRUCTURED_OUTPUT_KEYWORDS),
             is_long_context=estimated_tokens > 3000,
             requires_reasoning=any(keyword in normalized for keyword in REASONING_KEYWORDS),
             estimated_tokens=estimated_tokens,

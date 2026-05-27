@@ -1,18 +1,48 @@
 from django.contrib import admin
 from django.urls import path
 
-from apps.accounts.views import LoginView, LogoutView, MeView, ScreenDetailView, ScreenListView, UserDetailView, UserListView
+from apps.accounts.views import (
+    AuditLogListView,
+    LoginView,
+    LogoutView,
+    MeView,
+    ScreenDetailView,
+    ScreenListView,
+    SecurityPolicyView,
+    UserDetailView,
+    UserListView,
+    UserSessionListView,
+    UserSessionRevokeView,
+)
 from apps.catalog.views import (
     LLMModelDetailView,
     LLMModelListView,
+    ModelHealthEventListView,
+    ModelHealthOverrideDetailView,
+    ModelHealthOverrideListView,
+    ModelHealthRuleDetailView,
+    ModelHealthRuleListView,
     PolicyDetailView,
     PolicyListView,
     ProviderCredentialDetailView,
     ProviderCredentialListView,
+    ProviderCredentialModelImportView,
+    ProviderCredentialModelPreviewView,
+    ProviderCredentialTestView,
+    RecoveryStrategyDetailView,
+    RecoveryStrategyListView,
+    ResponseValidationRuleDetailView,
+    ResponseValidationRuleListView,
+    RoutingRuleDetailView,
+    RoutingRuleListView,
+    ThresholdRuleDetailView,
+    ThresholdRuleListView,
+    UsageQuotaDetailView,
+    UsageQuotaListView,
 )
 from apps.dashboard.views import DashboardMetricsView
 from apps.logs.views import RoutingLogListView
-from apps.routing.views import ChatView
+from apps.routing.views import ChatView, RoutingSimulatorView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -23,13 +53,36 @@ urlpatterns = [
     path("api/users/<int:pk>/", UserDetailView.as_view(), name="user-detail"),
     path("api/screens/", ScreenListView.as_view(), name="screens"),
     path("api/screens/<int:pk>/", ScreenDetailView.as_view(), name="screen-detail"),
+    path("api/security/policy/", SecurityPolicyView.as_view(), name="security-policy"),
+    path("api/security/sessions/", UserSessionListView.as_view(), name="user-sessions"),
+    path("api/security/sessions/<int:pk>/revoke/", UserSessionRevokeView.as_view(), name="user-session-revoke"),
+    path("api/security/audit-logs/", AuditLogListView.as_view(), name="audit-logs"),
     path("api/chat/", ChatView.as_view(), name="chat"),
+    path("api/routing-simulator/", RoutingSimulatorView.as_view(), name="routing-simulator"),
     path("api/models/", LLMModelListView.as_view(), name="models"),
     path("api/models/<int:pk>/", LLMModelDetailView.as_view(), name="model-detail"),
     path("api/policies/", PolicyListView.as_view(), name="policies"),
     path("api/policies/<int:pk>/", PolicyDetailView.as_view(), name="policy-detail"),
+    path("api/routing-rules/", RoutingRuleListView.as_view(), name="routing-rules"),
+    path("api/routing-rules/<int:pk>/", RoutingRuleDetailView.as_view(), name="routing-rule-detail"),
+    path("api/threshold-rules/", ThresholdRuleListView.as_view(), name="threshold-rules"),
+    path("api/threshold-rules/<int:pk>/", ThresholdRuleDetailView.as_view(), name="threshold-rule-detail"),
+    path("api/validation-rules/", ResponseValidationRuleListView.as_view(), name="validation-rules"),
+    path("api/validation-rules/<int:pk>/", ResponseValidationRuleDetailView.as_view(), name="validation-rule-detail"),
+    path("api/recovery-strategies/", RecoveryStrategyListView.as_view(), name="recovery-strategies"),
+    path("api/recovery-strategies/<int:pk>/", RecoveryStrategyDetailView.as_view(), name="recovery-strategy-detail"),
     path("api/provider-credentials/", ProviderCredentialListView.as_view(), name="provider-credentials"),
+    path("api/provider-credentials/test/", ProviderCredentialTestView.as_view(), name="provider-credential-test"),
+    path("api/provider-credentials/<int:pk>/models/preview/", ProviderCredentialModelPreviewView.as_view(), name="provider-model-preview"),
+    path("api/provider-credentials/<int:pk>/models/import/", ProviderCredentialModelImportView.as_view(), name="provider-model-import"),
     path("api/provider-credentials/<int:pk>/", ProviderCredentialDetailView.as_view(), name="provider-credential-detail"),
+    path("api/usage-quotas/", UsageQuotaListView.as_view(), name="usage-quotas"),
+    path("api/usage-quotas/<int:pk>/", UsageQuotaDetailView.as_view(), name="usage-quota-detail"),
+    path("api/model-health-rules/", ModelHealthRuleListView.as_view(), name="model-health-rules"),
+    path("api/model-health-rules/<int:pk>/", ModelHealthRuleDetailView.as_view(), name="model-health-rule-detail"),
+    path("api/model-health-events/", ModelHealthEventListView.as_view(), name="model-health-events"),
+    path("api/model-health-overrides/", ModelHealthOverrideListView.as_view(), name="model-health-overrides"),
+    path("api/model-health-overrides/<int:pk>/", ModelHealthOverrideDetailView.as_view(), name="model-health-override-detail"),
     path("api/routing-logs/", RoutingLogListView.as_view(), name="routing-logs"),
     path("api/dashboard/metrics/", DashboardMetricsView.as_view(), name="dashboard-metrics"),
 ]

@@ -2,8 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { EditIcon, PlusIcon, SearchIcon, UsersIcon } from 'lucide-vue-next'
 import AdminDataTable from '../components/common/AdminDataTable.vue'
+import PaginationControls from '../components/common/PaginationControls.vue'
 import UserModal from '../components/modals/UserModal.vue'
 import { AppUser, AppUserPayload, ScreenDefinition, useApi } from '../composables/useApi'
+import { usePagination } from '../composables/usePagination'
 
 const api = useApi()
 const users = ref<AppUser[]>([])
@@ -18,6 +20,16 @@ const filteredUsers = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   return users.value.filter((user) => !query || user.username.toLowerCase().includes(query))
 })
+const {
+  page,
+  pageSize,
+  pageSizeOptions,
+  totalItems,
+  totalPages,
+  startItem,
+  endItem,
+  paginatedItems: paginatedUsers
+} = usePagination(filteredUsers)
 
 async function loadPageData() {
   loading.value = true
@@ -127,7 +139,7 @@ onMounted(loadPageData)
       </template>
 
       <tr
-        v-for="user in filteredUsers"
+        v-for="user in paginatedUsers"
         :key="user.id"
         class="cursor-pointer transition-colors hover:bg-zinc-800/30"
         @click="openEditModal(user)"
@@ -155,6 +167,18 @@ onMounted(loadPageData)
           </button>
         </td>
       </tr>
+
+      <template #footer>
+        <PaginationControls
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :page-size-options="pageSizeOptions"
+          :total-items="totalItems"
+          :total-pages="totalPages"
+          :start-item="startItem"
+          :end-item="endItem"
+        />
+      </template>
     </AdminDataTable>
 
     <UserModal v-if="showModal" :user="selectedUser" :screens="screens" @close="closeModal" @delete="deleteUser" @save="saveUser" />

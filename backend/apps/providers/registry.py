@@ -14,9 +14,15 @@ class ProviderRegistry:
         }
         self._providers = {}
 
-    def get(self, provider_name: str):
+    def get(self, provider_name: str, credential=None):
         if provider_name not in self._provider_factories:
             raise ValueError(f"Provider '{provider_name}' is not configured yet.")
+        if credential is not None:
+            credential.mark_used()
+            return self._provider_factories[provider_name](
+                api_key=credential.get_access_token(),
+                base_url=credential.get_base_url(),
+            )
         if provider_name not in self._providers:
             self._providers[provider_name] = self._provider_factories[provider_name]()
         return self._providers[provider_name]

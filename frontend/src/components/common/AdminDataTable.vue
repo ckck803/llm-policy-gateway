@@ -32,5 +32,6 @@ withDefaults(
         </tbody>
       </table>
     </div>
+    <slot v-if="!loading && !isEmpty" name="footer" />
   </div>
 </template>

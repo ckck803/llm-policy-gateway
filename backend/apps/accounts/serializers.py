@@ -2,8 +2,9 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from apps.accounts.models import ScreenDefinition, UserScreenAccess
+from apps.accounts.models import AuditLog, ScreenDefinition, SecurityPolicy, UserScreenAccess, UserSession
 from apps.accounts.screens import get_available_screen_ids, normalize_allowed_screens
+from apps.accounts.session_control import revoke_user_sessions
 
 
 def get_allowed_screens(user: User) -> list[str]:
@@ -73,6 +74,8 @@ class UserSerializer(serializers.ModelSerializer):
                 user=instance,
                 defaults={"allowed_screens": allowed_screens},
             )
+            if SecurityPolicy.get_active().revoke_sessions_on_permission_change:
+                revoke_user_sessions(instance)
         return instance
 
 
@@ -100,3 +103,63 @@ class ScreenDefinitionSerializer(serializers.ModelSerializer):
 
     def validate_id(self, value):
         return value.strip()
+
+
+class SecurityPolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SecurityPolicy
+        fields = [
+            "id",
+            "max_sessions_user",
+            "max_sessions_staff",
+            "idle_timeout_minutes",
+            "absolute_timeout_hours",
+            "on_session_limit",
+            "revoke_sessions_on_permission_change",
+            "block_inactive_user_login",
+            "updated_at",
+        ]
+
+
+class UserSessionSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    is_expired = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserSession
+        fields = [
+            "id",
+            "username",
+            "ip_address",
+            "user_agent",
+            "login_at",
+            "last_seen_at",
+            "expires_at",
+            "revoked_at",
+            "logout_at",
+            "status",
+            "is_expired",
+        ]
+
+    def get_is_expired(self, instance):
+        return instance.is_expired()
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source="actor.username", read_only=True, allow_null=True)
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            "id",
+            "actor",
+            "actor_username",
+            "action",
+            "resource_type",
+            "resource_id",
+            "resource_name",
+            "metadata",
+            "ip_address",
+            "user_agent",
+            "created_at",
+        ]

@@ -2,8 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { EditIcon, PlusIcon, SearchIcon, ShieldCheckIcon } from 'lucide-vue-next'
 import AdminDataTable from '../components/common/AdminDataTable.vue'
+import PaginationControls from '../components/common/PaginationControls.vue'
 import ScreenModal from '../components/modals/ScreenModal.vue'
+import AppSelect from '../components/common/AppSelect.vue'
 import { ScreenDefinition, ScreenDefinitionPayload, useApi } from '../composables/useApi'
+import { usePagination } from '../composables/usePagination'
 
 const api = useApi()
 const screens = ref<ScreenDefinition[]>([])
@@ -29,6 +32,16 @@ const filteredScreens = computed(() => {
     return matchesQuery && matchesStatus
   })
 })
+const {
+  page,
+  pageSize,
+  pageSizeOptions,
+  totalItems,
+  totalPages,
+  startItem,
+  endItem,
+  paginatedItems: paginatedScreens
+} = usePagination(filteredScreens)
 
 async function loadScreens() {
   loading.value = true
@@ -105,14 +118,10 @@ onMounted(loadScreens)
           type="text"
         />
       </div>
-      <select
+      <AppSelect
         v-model="statusFilter"
-        class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
-      >
-        <option value="all">All status</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
+        :options="[{ value: 'all', label: 'All status' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]"
+      />
     </div>
 
     <div v-if="error" class="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
@@ -140,7 +149,7 @@ onMounted(loadScreens)
       </template>
 
       <tr
-        v-for="screen in filteredScreens"
+        v-for="screen in paginatedScreens"
         :key="screen.pk"
         class="cursor-pointer transition-colors hover:bg-zinc-800/30"
         @click="openEditModal(screen)"
@@ -174,6 +183,18 @@ onMounted(loadScreens)
           </button>
         </td>
       </tr>
+
+      <template #footer>
+        <PaginationControls
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :page-size-options="pageSizeOptions"
+          :total-items="totalItems"
+          :total-pages="totalPages"
+          :start-item="startItem"
+          :end-item="endItem"
+        />
+      </template>
     </AdminDataTable>
 
     <ScreenModal v-if="showModal" :screen="selectedScreen" @close="closeModal" @delete="deleteScreen" @save="saveScreen" />

@@ -77,11 +77,19 @@ REST_FRAMEWORK = {
     # 모든 API는 기본적으로 DRF TokenAuthentication을 요구합니다.
     # 로그인 API처럼 공개가 필요한 view만 개별적으로 AllowAny를 지정합니다.
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        "apps.accounts.authentication.ManagedTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.environ.get("DRF_ANON_THROTTLE_RATE", "60/min"),
+        "user": os.environ.get("DRF_USER_THROTTLE_RATE", "1200/min"),
+    },
 }
 
 PASSWORD_HASHERS = [

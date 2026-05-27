@@ -2,40 +2,75 @@
 import { computed, onMounted, ref } from 'vue'
 import Dashboard from './pages/Dashboard.vue'
 import Playground from './pages/Playground.vue'
+import RoutingSimulator from './pages/RoutingSimulator.vue'
 import Models from './pages/Models.vue'
 import RoutingLogs from './pages/RoutingLogs.vue'
 import Policies from './pages/Policies.vue'
+import RoutingRules from './pages/RoutingRules.vue'
+import ThresholdRules from './pages/ThresholdRules.vue'
+import ValidationRules from './pages/ValidationRules.vue'
+import RecoveryStrategies from './pages/RecoveryStrategies.vue'
 import ProviderCredentials from './pages/ProviderCredentials.vue'
+import UsageQuotas from './pages/UsageQuotas.vue'
+import ModelHealthRules from './pages/ModelHealthRules.vue'
+import HealthEvents from './pages/HealthEvents.vue'
+import HealthOverrides from './pages/HealthOverrides.vue'
 import Users from './pages/Users.vue'
 import Screens from './pages/Screens.vue'
+import SecuritySettings from './pages/SecuritySettings.vue'
+import UserSessions from './pages/UserSessions.vue'
+import AuditLogs from './pages/AuditLogs.vue'
 import Login from './pages/Login.vue'
 import {
   ActivityIcon,
   BotIcon,
+  CheckSquareIcon,
   CpuIcon,
   KeyRoundIcon,
+  GaugeIcon,
+  HeartPulseIcon,
+  HistoryIcon,
+  ListChecksIcon,
   LayoutDashboardIcon,
   LayoutIcon,
+  ListTreeIcon,
   LogOutIcon,
   MoonIcon,
+  RepeatIcon,
   RouteIcon,
+  SlidersHorizontalIcon,
   SunIcon,
   TerminalIcon,
-  UsersIcon
+  UsersIcon,
+  XIcon
 } from 'lucide-vue-next'
-import { AppUser, clearAuthToken, getAuthToken, setAuthToken, useApi } from './composables/useApi'
+import { AppUser, LoginResponse, clearAuthToken, getAuthToken, setAuthToken, useApi } from './composables/useApi'
 import { useTheme } from './composables/useTheme'
 
 const tabs = [
   { id: 'dashboard', label: 'Dashboard', component: Dashboard, group: 'service', icon: LayoutDashboardIcon },
   { id: 'playground', label: 'Playground', component: Playground, group: 'service', icon: TerminalIcon },
+  { id: 'simulator', label: 'Routing Simulator', component: RoutingSimulator, group: 'service', icon: ListChecksIcon },
   { id: 'models', label: 'Models', component: Models, group: 'service', icon: CpuIcon },
   { id: 'policies', label: 'Policies', component: Policies, group: 'service', icon: RouteIcon },
+  { id: 'routing-rules', label: 'Routing Rules', component: RoutingRules, group: 'service', icon: ListTreeIcon },
+  { id: 'threshold-rules', label: 'Threshold Rules', component: ThresholdRules, group: 'service', icon: SlidersHorizontalIcon },
+  { id: 'validation-rules', label: 'Validation Rules', component: ValidationRules, group: 'service', icon: CheckSquareIcon },
+  { id: 'recovery-strategies', label: 'Recovery Strategies', component: RecoveryStrategies, group: 'service', icon: RepeatIcon },
   { id: 'credentials', label: 'Credentials', component: ProviderCredentials, group: 'service', icon: KeyRoundIcon },
+  { id: 'quotas', label: 'Usage Quotas', component: UsageQuotas, group: 'service', icon: GaugeIcon },
+  { id: 'health-rules', label: 'Health Rules', component: ModelHealthRules, group: 'service', icon: HeartPulseIcon },
+  { id: 'health-events', label: 'Health Events', component: HealthEvents, group: 'service', icon: HistoryIcon },
+  { id: 'health-overrides', label: 'Health Overrides', component: HealthOverrides, group: 'service', icon: HeartPulseIcon },
   { id: 'logs', label: 'Routing Logs', component: RoutingLogs, group: 'service', icon: ActivityIcon },
   { id: 'users', label: 'Users', component: Users, group: 'admin', icon: UsersIcon },
-  { id: 'screens', label: 'Screens', component: Screens, group: 'admin', icon: LayoutIcon }
+  { id: 'screens', label: 'Screens', component: Screens, group: 'admin', icon: LayoutIcon },
+  { id: 'security-settings', label: 'Security Settings', component: SecuritySettings, group: 'admin', icon: KeyRoundIcon },
+  { id: 'sessions', label: 'User Sessions', component: UserSessions, group: 'admin', icon: ActivityIcon },
+  { id: 'audit-logs', label: 'Audit Logs', component: AuditLogs, group: 'admin', icon: HistoryIcon }
 ] as const
+
+type TabId = (typeof tabs)[number]['id']
 
 const navGroups = [
   { id: 'service', label: 'Service' },
@@ -46,7 +81,8 @@ const { isDark, toggle: toggleTheme } = useTheme()
 const api = useApi()
 const currentUser = ref<AppUser | null>(null)
 const authReady = ref(false)
-const activeTab = ref<(typeof tabs)[number]['id']>('dashboard')
+const activeTab = ref<TabId>('dashboard')
+const openTabs = ref<TabId[]>(['dashboard'])
 const visibleTabs = computed(() =>
   tabs.filter((tab) => currentUser.value?.allowed_screens.includes(tab.id) ?? false)
 )
@@ -58,19 +94,53 @@ const visibleNavGroups = computed(() =>
     }))
     .filter((group) => group.tabs.length > 0)
 )
-const activeComponent = computed(
-  () =>
-    visibleTabs.value.find((tab) => tab.id === activeTab.value)?.component ??
-    visibleTabs.value[0]?.component ??
-    Dashboard
+const openTabItems = computed(() =>
+  openTabs.value
+    .map((tabId) => visibleTabs.value.find((tab) => tab.id === tabId))
+    .filter((tab): tab is (typeof tabs)[number] => Boolean(tab))
 )
+
+function syncOpenTabsWithAccess() {
+  const allowedIds = visibleTabs.value.map((tab) => tab.id)
+  openTabs.value = openTabs.value.filter((tabId) => allowedIds.includes(tabId))
+
+  if (!openTabs.value.length && visibleTabs.value[0]) {
+    openTabs.value = [visibleTabs.value[0].id]
+  }
+
+  if (!openTabs.value.includes(activeTab.value) && openTabs.value[0]) {
+    activeTab.value = openTabs.value[0]
+  }
+}
+
+function openWorkspaceTab(tabId: TabId) {
+  if (!visibleTabs.value.some((tab) => tab.id === tabId)) {
+    return
+  }
+  if (!openTabs.value.includes(tabId)) {
+    openTabs.value.push(tabId)
+  }
+  activeTab.value = tabId
+}
+
+function closeWorkspaceTab(tabId: TabId) {
+  if (openTabs.value.length <= 1) {
+    return
+  }
+
+  const closingIndex = openTabs.value.indexOf(tabId)
+  openTabs.value = openTabs.value.filter((id) => id !== tabId)
+
+  if (activeTab.value === tabId) {
+    const fallbackIndex = Math.max(0, closingIndex - 1)
+    activeTab.value = openTabs.value[fallbackIndex] ?? openTabs.value[0]
+  }
+}
 
 async function loadMe() {
   try {
     currentUser.value = await api.getMe()
-    if (!visibleTabs.value.some((tab) => tab.id === activeTab.value) && visibleTabs.value[0]) {
-      activeTab.value = visibleTabs.value[0].id
-    }
+    syncOpenTabsWithAccess()
   } catch {
     clearAuthToken()
     currentUser.value = null
@@ -79,9 +149,11 @@ async function loadMe() {
   }
 }
 
-async function handleLoggedIn(token: string) {
-  setAuthToken(token)
-  await loadMe()
+function handleLoggedIn(response: LoginResponse) {
+  setAuthToken(response.token)
+  currentUser.value = response.user
+  syncOpenTabsWithAccess()
+  authReady.value = true
 }
 
 async function logout() {
@@ -92,6 +164,8 @@ async function logout() {
   }
   clearAuthToken()
   currentUser.value = null
+  activeTab.value = 'dashboard'
+  openTabs.value = ['dashboard']
 }
 
 onMounted(async () => {
@@ -136,7 +210,7 @@ onMounted(async () => {
                   ? 'bg-indigo-600/15 text-indigo-400 border border-indigo-500/20'
                   : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200 border border-transparent'
               ]"
-              @click="activeTab = tab.id"
+              @click="openWorkspaceTab(tab.id)"
             >
               <component
                 :is="tab.icon"
@@ -182,8 +256,48 @@ onMounted(async () => {
     </aside>
 
     <!-- Main content -->
-    <main class="flex-1 min-w-0 overflow-auto">
-      <component :is="activeComponent" />
+    <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div class="flex min-h-12 shrink-0 items-end overflow-x-auto border-b border-zinc-800/60 bg-zinc-950 px-3 pt-2">
+        <button
+          v-for="tab in openTabItems"
+          :key="tab.id"
+          :class="[
+            'group mr-1 flex h-10 min-w-36 max-w-56 items-center justify-between gap-3 rounded-t-lg border px-3 text-sm font-medium transition-colors',
+            activeTab === tab.id
+              ? 'border-zinc-700 border-b-zinc-900 bg-zinc-900 text-zinc-100'
+              : 'border-transparent bg-transparent text-zinc-500 hover:bg-zinc-900/70 hover:text-zinc-200'
+          ]"
+          type="button"
+          @click="activeTab = tab.id"
+        >
+          <span class="truncate">{{ tab.label }}</span>
+          <span
+            :class="[
+              'rounded p-0.5 transition-colors',
+              openTabItems.length <= 1
+                ? 'cursor-default text-zinc-700'
+                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100'
+            ]"
+            role="button"
+            tabindex="0"
+            :title="openTabItems.length <= 1 ? 'Keep one tab open' : 'Close tab'"
+            @click.stop="closeWorkspaceTab(tab.id)"
+            @keydown.enter.stop.prevent="closeWorkspaceTab(tab.id)"
+            @keydown.space.stop.prevent="closeWorkspaceTab(tab.id)"
+          >
+            <XIcon class="h-4 w-4" />
+          </span>
+        </button>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-auto">
+        <component
+          v-for="tab in openTabItems"
+          :key="tab.id"
+          :is="tab.component"
+          v-show="activeTab === tab.id"
+        />
+      </div>
     </main>
   </div>
 

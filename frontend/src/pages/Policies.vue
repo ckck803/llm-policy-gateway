@@ -2,8 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { EditIcon, PlusIcon, RouteIcon, SearchIcon } from 'lucide-vue-next'
 import AdminDataTable from '../components/common/AdminDataTable.vue'
+import PaginationControls from '../components/common/PaginationControls.vue'
 import PolicyModal from '../components/modals/PolicyModal.vue'
+import AppSelect from '../components/common/AppSelect.vue'
 import { RoutingPolicy, RoutingPolicyPayload, useApi } from '../composables/useApi'
+import { usePagination } from '../composables/usePagination'
 
 const api = useApi()
 const policies = ref<RoutingPolicy[]>([])
@@ -29,6 +32,16 @@ const filteredPolicies = computed(() => {
     return matchesQuery && matchesStatus
   })
 })
+const {
+  page,
+  pageSize,
+  pageSizeOptions,
+  totalItems,
+  totalPages,
+  startItem,
+  endItem,
+  paginatedItems: paginatedPolicies
+} = usePagination(filteredPolicies)
 
 async function loadPolicies() {
   loading.value = true
@@ -105,14 +118,10 @@ onMounted(loadPolicies)
           type="text"
         />
       </div>
-      <select
+      <AppSelect
         v-model="statusFilter"
-        class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
-      >
-        <option value="all">All status</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
+        :options="[{ value: 'all', label: 'All status' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]"
+      />
     </div>
 
     <div v-if="error" class="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
@@ -126,6 +135,7 @@ onMounted(loadPolicies)
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Speed</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Cost</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Context</th>
+        <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Rules</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Local only</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Status</th>
         <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">Action</th>
@@ -144,7 +154,7 @@ onMounted(loadPolicies)
       </template>
 
       <tr
-        v-for="policy in filteredPolicies"
+        v-for="policy in paginatedPolicies"
         :key="policy.id"
         class="cursor-pointer transition-colors hover:bg-zinc-800/30"
         @click="openEditModal(policy)"
@@ -157,6 +167,15 @@ onMounted(loadPolicies)
         <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">{{ policy.priority_config.speed_weight ?? 'default' }}</td>
         <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">{{ policy.priority_config.cost_weight ?? 'default' }}</td>
         <td class="whitespace-nowrap px-5 py-3.5 text-sm text-zinc-300">{{ policy.priority_config.context_weight ?? 'default' }}</td>
+        <td class="px-5 py-3.5 text-xs text-zinc-400">
+          <div class="flex max-w-80 flex-wrap gap-1.5">
+            <span v-if="policy.priority_config.prefer_coding_models ?? true" class="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5">code</span>
+            <span v-if="policy.priority_config.prefer_reasoning_models ?? true" class="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5">reasoning</span>
+            <span v-if="policy.priority_config.min_context_window" class="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5">ctx {{ policy.priority_config.min_context_window }}+</span>
+            <span v-if="policy.priority_config.max_estimated_cost_usd" class="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5">max ${{ policy.priority_config.max_estimated_cost_usd }}</span>
+            <span v-if="policy.priority_config.fallback_to_local_on_budget" class="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5">budget local fallback</span>
+          </div>
+        </td>
         <td class="whitespace-nowrap px-5 py-3.5">
           <span
             :class="[
@@ -192,6 +211,18 @@ onMounted(loadPolicies)
           </button>
         </td>
       </tr>
+
+      <template #footer>
+        <PaginationControls
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :page-size-options="pageSizeOptions"
+          :total-items="totalItems"
+          :total-pages="totalPages"
+          :start-item="startItem"
+          :end-item="endItem"
+        />
+      </template>
     </AdminDataTable>
 
     <PolicyModal
