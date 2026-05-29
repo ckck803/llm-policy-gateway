@@ -16,8 +16,9 @@ const emit = defineEmits<{
 }>()
 
 const isEdit = computed(() => Boolean(props.model))
-const externalProviders = ['openai', 'gemini', 'openrouter']
-const usesCredential = computed(() => externalProviders.includes(form.provider))
+const credentialProviders = ['ollama', 'openai', 'gemini', 'openrouter']
+const remoteCapableProviders = ['ollama']
+const usesCredential = computed(() => credentialProviders.includes(form.provider))
 const matchingCredentials = computed(() =>
   props.credentials.filter((credential) => credential.provider === form.provider)
 )
@@ -74,12 +75,21 @@ watch(
       form.privacy_level = 'local'
       return
     }
-    form.privacy_level = 'external'
+    form.privacy_level = remoteCapableProviders.includes(form.provider) ? form.privacy_level : 'external'
     if (
       form.provider_credential &&
       !matchingCredentials.value.some((credential) => credential.id === form.provider_credential)
     ) {
       form.provider_credential = null
+    }
+  }
+)
+
+watch(
+  () => form.provider_credential,
+  () => {
+    if (form.provider === 'ollama' && form.provider_credential) {
+      form.privacy_level = 'external'
     }
   }
 )

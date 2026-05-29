@@ -20,18 +20,22 @@ const testing = ref(false)
 const testResult = ref<ProviderCredentialTestResult | null>(null)
 
 const form = reactive<ProviderCredentialPayload>({
-  provider: 'openai',
+  provider: 'ollama',
   display_name: '',
   base_url: '',
   access_token: '',
   is_active: true
 })
 
+const isOllama = computed(() => form.provider === 'ollama')
+const requiresAccessToken = computed(() => !isOllama.value)
+const canTestConnection = computed(() => Boolean(form.base_url && (!requiresAccessToken.value || form.access_token)))
+
 watch(
   () => props.credential,
   (credential) => {
     Object.assign(form, {
-      provider: credential?.provider ?? 'openai',
+      provider: credential?.provider ?? 'ollama',
       display_name: credential?.display_name ?? '',
       base_url: credential?.base_url ?? '',
       access_token: '',
@@ -87,26 +91,27 @@ async function testConnection() {
         <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
           <label class="block">
             <span class="mb-1.5 block text-xs font-medium text-zinc-400">Provider</span>
-            <AppSelect v-model="form.provider" :options="['openai', 'gemini', 'openrouter']" />
+            <AppSelect v-model="form.provider" :options="['ollama', 'openai', 'gemini', 'openrouter']" />
           </label>
           <label class="block">
             <span class="mb-1.5 block text-xs font-medium text-zinc-400">Display name</span>
-            <input v-model="form.display_name" required placeholder="OpenAI Production" class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50" />
+            <input v-model="form.display_name" required :placeholder="isOllama ? 'RunPod Ollama' : 'OpenAI Production'" class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50" />
           </label>
           <label class="block md:col-span-2">
             <span class="mb-1.5 block text-xs font-medium text-zinc-400">Base URL</span>
-            <input v-model="form.base_url" required placeholder="https://openrouter.ai/api/v1" class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50" />
+            <input v-model="form.base_url" required :placeholder="isOllama ? 'https://your-runpod-host.proxy.runpod.net' : 'https://openrouter.ai/api/v1'" class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50" />
           </label>
           <label class="block md:col-span-2">
-            <span class="mb-1.5 block text-xs font-medium text-zinc-400">Access Token</span>
+            <span class="mb-1.5 block text-xs font-medium text-zinc-400">Access Token {{ isOllama ? '(optional)' : '' }}</span>
             <input
               v-model="form.access_token"
-              :required="!isEdit"
+              :required="!isEdit && requiresAccessToken"
               type="password"
-              :placeholder="isEdit ? `Leave blank to keep ${credential?.access_token_masked || 'current token'}` : 'API key or access token'"
+              :placeholder="isEdit ? `Leave blank to keep ${credential?.access_token_masked || 'current token'}` : isOllama ? 'Bearer token if RunPod/proxy requires one' : 'API key or access token'"
               class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
             />
-            <p v-if="isEdit" class="mt-1 text-xs text-zinc-500">Entering a new token rotates the stored credential token.</p>
+            <p v-if="isOllama" class="mt-1 text-xs text-zinc-500">RunPod Ollama usually uses the Ollama API path such as /api/chat and /api/tags under this base URL.</p>
+            <p v-else-if="isEdit" class="mt-1 text-xs text-zinc-500">Entering a new token rotates the stored credential token.</p>
           </label>
           <label class="flex items-center gap-3 text-sm font-medium text-zinc-400">
             <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-zinc-600 bg-zinc-800 accent-indigo-500" />
@@ -147,7 +152,7 @@ async function testConnection() {
           </button>
           <button
             class="flex items-center gap-2 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="testing || !form.base_url || !form.access_token"
+            :disabled="testing || !canTestConnection"
             type="button"
             @click="testConnection"
           >

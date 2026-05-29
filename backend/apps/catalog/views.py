@@ -261,9 +261,9 @@ class ProviderCredentialDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class ProviderCredentialTestSerializer(serializers.Serializer):
-    provider = serializers.ChoiceField(choices=["openai", "gemini", "openrouter"])
+    provider = serializers.ChoiceField(choices=["ollama", "openai", "gemini", "openrouter"])
     base_url = serializers.CharField()
-    access_token = serializers.CharField()
+    access_token = serializers.CharField(allow_blank=True, required=False)
 
 
 class ProviderCredentialTestView(APIView):
@@ -275,7 +275,7 @@ class ProviderCredentialTestView(APIView):
         serializer.is_valid(raise_exception=True)
         provider = serializer.validated_data["provider"]
         base_url = serializer.validated_data["base_url"].rstrip("/")
-        access_token = serializer.validated_data["access_token"]
+        access_token = serializer.validated_data.get("access_token", "")
 
         try:
             response = self.request_provider(provider, base_url, access_token)
@@ -299,6 +299,15 @@ class ProviderCredentialTestView(APIView):
             )
 
     def request_provider(self, provider: str, base_url: str, access_token: str):
+        if provider == "ollama":
+            headers = {}
+            if access_token:
+                headers["Authorization"] = f"Bearer {access_token}"
+            return requests.get(
+                f"{base_url}/api/tags",
+                headers=headers,
+                timeout=15,
+            )
         if provider == "gemini":
             return requests.get(
                 f"{base_url}/models",

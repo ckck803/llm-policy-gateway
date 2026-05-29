@@ -185,7 +185,7 @@ onMounted(loadCredentials)
       <template #empty>
         <KeyRoundIcon class="mx-auto mb-4 h-12 w-12 text-zinc-700" />
         <h3 class="mb-1 text-sm font-semibold text-zinc-300">No credentials found</h3>
-        <p class="mb-4 text-sm text-zinc-600">Add OpenAI or Gemini credentials to enable external routing.</p>
+        <p class="mb-4 text-sm text-zinc-600">Add Ollama, OpenAI, Gemini, or OpenRouter credentials to enable external routing.</p>
         <button
           class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
           @click="openCreateModal"

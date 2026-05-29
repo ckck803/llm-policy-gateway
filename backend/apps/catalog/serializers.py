@@ -73,13 +73,14 @@ class LLMModelSerializer(serializers.ModelSerializer):
             "provider_credential",
             getattr(self.instance, "provider_credential", None),
         )
-        if provider == "ollama" and credential is not None:
-            raise serializers.ValidationError(
-                {"provider_credential": "Local Ollama models do not use provider credentials."}
-            )
         if credential is not None and credential.provider != provider:
             raise serializers.ValidationError(
                 {"provider_credential": "Credential provider must match the model provider."}
+            )
+        privacy_level = attrs.get("privacy_level", getattr(self.instance, "privacy_level", "local"))
+        if provider == "ollama" and credential is not None and privacy_level == "local":
+            raise serializers.ValidationError(
+                {"privacy_level": "Remote Ollama models that use credentials must be marked as external."}
             )
         return attrs
 

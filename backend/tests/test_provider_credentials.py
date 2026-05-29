@@ -177,6 +177,75 @@ def test_provider_registry_uses_model_specific_credential():
 
 
 @pytest.mark.django_db
+def test_model_serializer_accepts_remote_ollama_credential_when_external():
+    credential = ProviderCredential.objects.create(provider="ollama", display_name="RunPod Ollama")
+    credential.set_base_url("https://runpod.example")
+    credential.set_access_token("")
+    credential.save()
+
+    serializer = LLMModelSerializer(
+        data={
+            "provider": "ollama",
+            "name": "llama3.1:8b",
+            "display_name": "RunPod Llama 3.1",
+            "provider_credential": credential.id,
+            "role": "general",
+            "quality_level": 3,
+            "speed_level": 3,
+            "cost_level": 1,
+            "privacy_level": "external",
+            "context_window": 8192,
+            "is_active": True,
+        }
+    )
+
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.save().provider_credential == credential
+
+
+@pytest.mark.django_db
+def test_model_serializer_rejects_remote_ollama_credential_marked_local():
+    credential = ProviderCredential.objects.create(provider="ollama", display_name="RunPod Ollama")
+    credential.set_base_url("https://runpod.example")
+    credential.set_access_token("")
+    credential.save()
+
+    serializer = LLMModelSerializer(
+        data={
+            "provider": "ollama",
+            "name": "llama3.1:8b",
+            "display_name": "RunPod Llama 3.1",
+            "provider_credential": credential.id,
+            "role": "general",
+            "quality_level": 3,
+            "speed_level": 3,
+            "cost_level": 1,
+            "privacy_level": "local",
+            "context_window": 8192,
+            "is_active": True,
+        }
+    )
+
+    assert not serializer.is_valid()
+    assert "privacy_level" in serializer.errors
+
+
+@pytest.mark.django_db
+def test_provider_registry_uses_remote_ollama_credential():
+    credential = ProviderCredential.objects.create(provider="ollama", display_name="RunPod Ollama")
+    credential.set_base_url("https://runpod.example")
+    credential.set_access_token("runpod-token")
+    credential.save()
+
+    provider = ProviderRegistry().get("ollama", credential=credential)
+
+    assert provider.api_key == "runpod-token"
+    assert provider.base_url == "https://runpod.example"
+    credential.refresh_from_db()
+    assert credential.last_used_at is not None
+
+
+@pytest.mark.django_db
 def test_staff_can_test_provider_credential(monkeypatch):
     staff_user = User.objects.create_user(username="admin", password="pass12345", is_staff=True)
     Token.objects.create(user=staff_user)
@@ -212,6 +281,45 @@ def test_staff_can_test_provider_credential(monkeypatch):
     assert response.data["ok"] is True
     assert calls[0]["url"] == "https://openrouter.ai/api/v1/models"
     assert calls[0]["headers"]["Authorization"] == "Bearer secret-token"
+    assert calls[0]["timeout"] == 15
+
+
+@pytest.mark.django_db
+def test_staff_can_test_ollama_provider_credential_without_token(monkeypatch):
+    staff_user = User.objects.create_user(username="admin", password="pass12345", is_staff=True)
+    Token.objects.create(user=staff_user)
+
+    class FakeResponse:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"models": []}
+
+    calls = []
+
+    def fake_get(url, headers, timeout):
+        calls.append({"url": url, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr("apps.catalog.views.requests.get", fake_get)
+
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Token {staff_user.auth_token.key}")
+    response = client.post(
+        "/api/provider-credentials/test/",
+        {
+            "provider": "ollama",
+            "base_url": "https://runpod.example",
+            "access_token": "",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["ok"] is True
+    assert calls[0]["url"] == "https://runpod.example/api/tags"
+    assert calls[0]["headers"] == {}
     assert calls[0]["timeout"] == 15
 
 
@@ -267,6 +375,44 @@ def test_staff_can_preview_provider_models(monkeypatch):
     assert response.data["models"][1]["name"] == "new-model"
     assert response.data["models"][1]["exists"] is False
     assert response.data["models"][1]["context_window"] == 32768
+
+
+@pytest.mark.django_db
+def test_staff_can_preview_ollama_provider_models(monkeypatch):
+    staff_user = User.objects.create_user(username="admin", password="pass12345", is_staff=True)
+    Token.objects.create(user=staff_user)
+    credential = ProviderCredential.objects.create(provider="ollama", display_name="RunPod Ollama", is_active=True)
+    credential.set_base_url("https://runpod.example")
+    credential.set_access_token("runpod-token")
+    credential.save()
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "models": [
+                    {"name": "llama3.1:8b"},
+                    {"model": "qwen2.5-coder:7b"},
+                ]
+            }
+
+    def fake_get(url, headers, timeout):
+        assert url == "https://runpod.example/api/tags"
+        assert headers["Authorization"] == "Bearer runpod-token"
+        assert timeout == 20
+        return FakeResponse()
+
+    monkeypatch.setattr("apps.catalog.provider_models.requests.get", fake_get)
+
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Token {staff_user.auth_token.key}")
+    response = client.get(f"/api/provider-credentials/{credential.id}/models/preview/")
+
+    assert response.status_code == 200
+    assert response.data["models"][0]["name"] == "llama3.1:8b"
+    assert response.data["models"][1]["name"] == "qwen2.5-coder:7b"
 
 
 @pytest.mark.django_db

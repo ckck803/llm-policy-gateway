@@ -239,6 +239,7 @@ class RecoveryStrategy(models.Model):
 
 class ProviderCredential(models.Model):
     PROVIDER_CHOICES = [
+        ("ollama", "Ollama"),
         ("openai", "OpenAI"),
         ("gemini", "Gemini"),
         ("openrouter", "OpenRouter"),
